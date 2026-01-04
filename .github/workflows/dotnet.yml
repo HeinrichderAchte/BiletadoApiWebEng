@@ -66,8 +66,13 @@ jobs:
           path: publish
           
       - name: Set OWNER lowercase
+        shell: bash
         run: |
-          echo "OWNER=$(echo \"$GITHUB_REPOSITORY_OWNER\" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+          OWNER="${GITHUB_REPOSITORY_OWNER,,}"
+          OWNER="${OWNER//\"/}"    # entferne doppelte Anführungszeichen, falls vorhanden
+          OWNER="${OWNER//\'/}"    # entferne einfache Anführungszeichen, falls vorhanden
+          echo "OWNER=$OWNER" >> $GITHUB_ENV
+
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
