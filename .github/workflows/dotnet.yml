@@ -78,13 +78,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+
       - name: Build and push image
         uses: docker/build-push-action@v4
         with:
           context: ./publish
-          file: ./Dockerfile
+          file: ./publish/Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/biletado:${{ github.sha }}
-            ghcr.io/${{ github.repository_owner }}/biletado:latest
+            ghcr.io/${{ toLower(github.repository_owner) }}/biletado:${{ github.sha }}
+            ghcr.io/${{ toLower(github.repository_owner) }}/biletado:latest
