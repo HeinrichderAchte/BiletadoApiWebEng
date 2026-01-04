@@ -64,6 +64,10 @@ jobs:
         with:
           name: app-publish
           path: publish
+          
+      - name: Set OWNER lowercase
+        run: |
+          echo "OWNER=$(echo \"$GITHUB_REPOSITORY_OWNER\" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
@@ -87,5 +91,5 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ toLower(github.repository_owner) }}/biletado:${{ github.sha }}
-            ghcr.io/${{ toLower(github.repository_owner) }}/biletado:latest
+            ghcr.io/${{ env.OWNER }}/biletado:${{ github.sha }}
+            ghcr.io/${{ env.OWNER }}/biletado:latest
