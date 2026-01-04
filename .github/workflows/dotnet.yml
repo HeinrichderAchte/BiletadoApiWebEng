@@ -26,6 +26,7 @@
 #      run: dotnet build --no-restore
 #    - name: Test with Dotnet CLI 
 #      run: dotnet test --no-build --verbosity normal
+# yaml
 name: CI + Build and publish container
 on:
   push:
@@ -61,6 +62,9 @@ jobs:
       - name: Publish app
         run: dotnet publish -c Release -o publish
 
+      - name: Copy Dockerfile into publish
+        run: cp ./Dockerfile publish/
+
       - name: Upload published artifact
         uses: actions/upload-artifact@v4
         with:
@@ -78,10 +82,6 @@ jobs:
         with:
           name: app-publish
           path: publish
-
-      - name: Copy Dockerfile into publish context
-        run: |
-          cp Dockerfile publish/
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
