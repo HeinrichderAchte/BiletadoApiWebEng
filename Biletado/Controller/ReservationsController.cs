@@ -91,7 +91,7 @@ public class ReservationsController : ControllerBase
     }
 
     [HttpPost]
-    [AllowAnonymous]
+    [Authorize]
     public async Task<IActionResult> CreateReservation([FromBody] Reservation reservation)
     {
         if (reservation == null) return BadRequest();
@@ -248,3 +248,4 @@ public class ReservationsController : ControllerBase
     }
     
 }
+
