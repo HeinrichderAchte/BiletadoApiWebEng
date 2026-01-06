@@ -152,6 +152,7 @@ else
         {
             options.DefaultAuthenticateScheme = "DevAuth";
             options.DefaultChallengeScheme = "DevAuth";
+            options.DefaultScheme = "DevAuth";
         })
         .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, Biletado.Repository.DevAuth.DevAuthHandler>("DevAuth", options => { });
 
