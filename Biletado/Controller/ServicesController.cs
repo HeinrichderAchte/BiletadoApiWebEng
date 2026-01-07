@@ -14,9 +14,10 @@ public class ServicesController : ControllerBase
     private readonly AssetsDbContext _assetsDb;
     private readonly ILogger<ServicesController> _logger;
 
-    public ServicesController(AssetsDbContext assetsDb)
+    public ServicesController(AssetsDbContext assetsDb, ILogger<ServicesController> logger)
     {
         _assetsDb = assetsDb;
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     [HttpGet("status")]
