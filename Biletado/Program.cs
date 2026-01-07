@@ -81,6 +81,8 @@ builder.Services.AddControllers().AddJsonOptions(opts =>
     opts.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
 });
 
+var isDevelopement = builder.Environment.IsDevelopment();
+
 // Configure authentication: JWT Bearer only when enabled
 if (authEnabled)
 {
@@ -146,7 +148,7 @@ else
 {
     Console.WriteLine("Authentication disabled via configuration (Authentication:Enabled=false)");
     
-    if (builder.Environment.IsDevelopment())
+    if (isDevelopement)
     {
         builder.Services.AddAuthentication(options =>
         {
@@ -158,6 +160,16 @@ else
 
         builder.Services.AddAuthorization();
         Console.WriteLine("DevAuth registered as default authentication scheme for Development.");
+    }
+    else
+    {
+        builder.Services.AddAuthorization(options =>
+        {
+            options.FallbackPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+                .RequireAssertion(_ => true)
+                .Build();
+        });
+        Console.WriteLine("Authorization fallback policy set to allow all (auth disabled).");
     }
 }
 
@@ -187,7 +199,7 @@ if (app.Environment.IsDevelopment())
 
 // Authentication + Authorization middleware (order matters). Only add when enabled or DevAuth registered.
 app.UseHttpsRedirection();
-if (authEnabled || app.Environment.IsDevelopment())
+if (authEnabled || isDevelopement)
 {
     app.UseAuthentication();
     app.UseAuthorization();
