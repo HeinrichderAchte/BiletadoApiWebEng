@@ -2,11 +2,33 @@
 using Biletado;
 using Microsoft.EntityFrameworkCore;
 using System.Reflection;
-using Biletado.Repository.Swagger;
 using System.Text.Json.Serialization;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var authEnabled = builder.Configuration.GetValue<bool>("Authentication:Enabled");
+
+if (!authEnabled)
+{
+    // Registriere NoAuth als Default-Scheme, verhindert die 'No authenticationScheme was specified' Exception
+    builder.Services.AddAuthentication(options =>
+        {
+            options.DefaultAuthenticateScheme = "NoAuth";
+            options.DefaultChallengeScheme = "NoAuth";
+            options.DefaultScheme = "NoAuth";
+        })
+        .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, Biletado.Repository.DevAuth.NoAuthHandler>(
+            "NoAuth", options => { });
+
+    // Optional: Falls noch [Authorize] vorhanden ist, erlaubt diese FallbackPolicy alle Anfragen
+    builder.Services.AddAuthorization(options =>
+    {
+        options.FallbackPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+            .RequireAssertion(_ => true)
+            .Build();
+    });
+}
 
 // Setup Serilog early so startup logs are captured
 var serilogConfig = new LoggerConfiguration()
@@ -33,13 +55,6 @@ builder.Services.AddSwaggerGen(c =>
     {
         c.IncludeXmlComments(xmlPath);
     }
-
-    // register custom OperationFilter / SchemaFilter
-    c.OperationFilter<ReservationsOperationFilter>();
-    c.SchemaFilter<EnumSchemaFilter>();
-    c.OperationFilter<UuidParameterFilter>();
-
-    // Keine Security-Definitionen — Auth wurde entfernt
 });
 
 // Configure JSON serializer to use string enums
@@ -70,15 +85,11 @@ builder.Services.AddDbContext<AssetsDbContext>(options =>
 
 var app = builder.Build();
 
-// Swagger in Development
-if (isDevelopment)
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-
 app.UseHttpsRedirection();
 
 app.MapControllers();
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.Run();
