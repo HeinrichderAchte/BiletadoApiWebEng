@@ -1,4 +1,3 @@
-// csharp
 using Biletado;
 using Microsoft.EntityFrameworkCore;
 using System.Reflection;
@@ -31,16 +30,17 @@ if (!authEnabled)
 }
 
 // Loggin Configuration is read from appsettings.json 
-var serilogConfig = new LoggerConfiguration()
+Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .Enrich.FromLogContext()
     .Enrich.WithProperty("environment", builder.Environment.EnvironmentName)
     .CreateLogger();
 
 
+
+
 // integrate Serilog into generic host logging
 builder.Logging.ClearProviders();
-builder.Logging.AddSerilog(Log.Logger, dispose: true);
 
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
