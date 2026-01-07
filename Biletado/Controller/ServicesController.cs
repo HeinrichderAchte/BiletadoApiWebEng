@@ -1,4 +1,9 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Elastic.CommonSchema;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Threading.Tasks;
 
 namespace Biletado.Controller;
 
@@ -7,6 +12,7 @@ namespace Biletado.Controller;
 public class ServicesController : ControllerBase
 {
     private readonly AssetsDbContext _assetsDb;
+    private readonly ILogger<ServicesController> _logger;
 
     public ServicesController(AssetsDbContext assetsDb)
     {
@@ -15,11 +21,13 @@ public class ServicesController : ControllerBase
 
     [HttpGet("status")]
     public IActionResult GetStatus()
-    {
+    {   
+        _logger.LogInformation("Reservations Database connection established." +
+                               "RemoteIP: {RemoteIP} ", HttpContext.Connection.RemoteIpAddress.ToString() ?? "unknown");
         return Ok(new
         {
             authors= new[]{"Henri Weber", "Vivian Heidt"},
-            api_version="1.0.8",
+            api_version="1.0.9",
         });
     }
 
@@ -30,35 +38,50 @@ public class ServicesController : ControllerBase
         try
         {
             assetsConnected = await _assetsDb.Database.CanConnectAsync();
-
+            
         }
         catch
         {
             assetsConnected = false;
+            _logger.LogError("Reservations Database connection failed and health check could not be completed.");
         }
 
-        var result = new
+        if (assetsConnected)
         {
+            _logger.LogInformation("Reservations Database connection established."); 
+            var result = new
+            {
+                live = true,
+                ready = assetsConnected,
+                databases = new
+                {
+                    assets = new
+                    {
+                        connected = assetsConnected
+                    }
+                }
+            };
+            return Ok(result);
+        }
+        var serviceUnavailable = new
+        {
+            code = 503, 
+            message = "Service Unavailable",
             live = true,
             ready = assetsConnected,
-            databases = new
-            {
-                assets = new
-                {
-                    connected = assetsConnected
-                }
-            }
         };
-        return Ok(result);
+        return StatusCode(503, serviceUnavailable);
     }
 
     [HttpGet("health/live")]
     public IActionResult GetHealthLive()
     {
+        
         var result = new
         {
             live = true
         };
+        _logger.LogInformation("The process is alive."); 
         return Ok(result);
     }
 
@@ -69,17 +92,32 @@ public class ServicesController : ControllerBase
         try
         {
             assetsConnected = await _assetsDb.Database.CanConnectAsync();
+            
+            
 
         }
         catch
         {
             assetsConnected = false;
+            _logger.LogError("Reservations Database connection failed and readiness check could not be completed.");
         }
 
-        var result = new
+        if (assetsConnected)
         {
-            ready = assetsConnected
+            var result = new
+            {
+                ready = true
+            }; 
+            return Ok(result);
+        }
+        var serviceUnavailable = new
+        {
+            code = 503, 
+            message = "Service Unavailable",
+            ready = false
         };
-        return Ok(result);
+        return StatusCode(503, serviceUnavailable);
+
+        
     }
 }

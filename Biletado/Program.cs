@@ -30,15 +30,13 @@ if (!authEnabled)
     });
 }
 
-// Setup Serilog early so startup logs are captured
+// Loggin Configuration is read from appsettings.json 
 var serilogConfig = new LoggerConfiguration()
-    .Enrich.FromLogContext()
     .ReadFrom.Configuration(builder.Configuration)
-    .WriteTo.Console()
+    .Enrich.FromLogContext()
     .Enrich.WithProperty("environment", builder.Environment.EnvironmentName)
-    .Enrich.WithProperty("machine", System.Environment.MachineName);
+    .CreateLogger();
 
-Log.Logger = serilogConfig.CreateLogger();
 
 // integrate Serilog into generic host logging
 builder.Logging.ClearProviders();
