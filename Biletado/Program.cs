@@ -37,8 +37,7 @@ Log.Logger = new LoggerConfiguration()
     .CreateLogger();
 
 
-
-
+builder.Host.UseSerilog(); 
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -78,13 +77,19 @@ builder.Services.AddDbContext<AssetsDbContext>(options =>
     );
 }
 
-var app = builder.Build();
 
-app.UseHttpsRedirection();
+try
+{
+    var app = builder.Build();
+    app.UseSerilogRequestLogging();
+    app.UseHttpsRedirection();
+    app.MapControllers();
+    app.UseAuthentication();
+    app.UseAuthorization();
+    app.Run();
+}
+finally
+{
+    Log.CloseAndFlush();
+}
 
-app.MapControllers();
-
-app.UseAuthentication();
-app.UseAuthorization();
-
-app.Run();
