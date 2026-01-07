@@ -1,20 +1,12 @@
+// csharp
 using Biletado;
 using Microsoft.EntityFrameworkCore;
 using System.Reflection;
 using Biletado.Repository.Swagger;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.OpenApi.Models;
 using System.Text.Json.Serialization;
-using Biletado.Repository.DevAuth;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
-
-// Enable detailed IdentityModel error messages in Development for debugging token issues
-if (builder.Environment.IsDevelopment())
-{
-    Microsoft.IdentityModel.Logging.IdentityModelEventSource.ShowPII = true;
-}
 
 // Setup Serilog early so startup logs are captured
 var serilogConfig = new LoggerConfiguration()
@@ -30,13 +22,6 @@ Log.Logger = serilogConfig.CreateLogger();
 builder.Logging.ClearProviders();
 builder.Logging.AddSerilog(Log.Logger, dispose: true);
 
-// central flag to enable/disable authentication globally (default = false)
-var authEnabled = builder.Configuration.GetValue<bool?>("Authentication:Enabled") ?? false;
-Log.Information("Authentication enabled: {AuthEnabled}", authEnabled);
-
-// Authentication configuration will be read from configuration (appsettings or environment variables)
-// Expected keys (when enabled): Authentication:Authority (issuer URL), Authentication:Audience (API audience)
-
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -49,133 +34,31 @@ builder.Services.AddSwaggerGen(c =>
         c.IncludeXmlComments(xmlPath);
     }
 
-    // register custom OperationFilter to tweak the Reservations GET parameter descriptions and examples
+    // register custom OperationFilter / SchemaFilter
     c.OperationFilter<ReservationsOperationFilter>();
-
-    // register enum schema filter so enums are displayed as string names in Swagger
     c.SchemaFilter<EnumSchemaFilter>();
-
-    // register uuid parameter filter to relax the pattern to accept upper-case hex
     c.OperationFilter<UuidParameterFilter>();
 
-    // Only add Swagger JWT security when auth is enabled
-    if (authEnabled)
-    {
-        c.AddSecurityDefinition("bearer", new OpenApiSecurityScheme
-        {
-            Description = "JWT Authorization header using the Bearer scheme. Example: \"Authorization: Bearer {token}\"",
-            Name = "Authorization",
-            In = ParameterLocation.Header,
-            Type = SecuritySchemeType.Http,
-            Scheme = "bearer",
-            BearerFormat = "JWT"
-        });
-
-        // Only add the security requirement to operations that actually require authorization
-        c.OperationFilter<AuthorizeCheckOperationFilter>();
-    }
+    // Keine Security-Definitionen — Auth wurde entfernt
 });
 
-// Configure JSON serializer to use string enums (so API expects 'Replace'/'Restore' strings)
+// Configure JSON serializer to use string enums
 builder.Services.AddControllers().AddJsonOptions(opts =>
 {
     opts.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
 });
 
-var isDevelopement = builder.Environment.IsDevelopment();
+var isDevelopment = builder.Environment.IsDevelopment();
 
-// Configure authentication: JWT Bearer only when enabled
-if (authEnabled)
-{
-    var authority = builder.Configuration["Authentication:Authority"];
-    var audience = builder.Configuration["Authentication:Audience"];
-    var metadataAddress = builder.Configuration["Authentication:MetadataAddress"];
-    var validIssuer = builder.Configuration["Authentication:ValidIssuer"];
+// Databases
+builder.Services.AddDbContext<AssetsDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("AssetsConnection")));
 
-    if (string.IsNullOrWhiteSpace(authority) || string.IsNullOrWhiteSpace(audience))
-    {
-        throw new InvalidOperationException("Authentication is enabled but Authentication:Authority or Authentication:Audience is not configured. Set these values in configuration or disable authentication.");
-    }
-
-    // Explicitly set default authentication/challenge schemes to avoid 'no default scheme' errors
-    builder.Services.AddAuthentication(options =>
-    {
-        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-    })
-    .AddJwtBearer(options =>
-    {
-        options.Authority = authority;
-        options.Audience = audience;
-        
-        if (!string.IsNullOrEmpty(metadataAddress))
-        {
-            options.MetadataAddress = metadataAddress;
-        }
-        // Accept tokens from the authority; for local dev set RequireHttpsMetadata=false if needed
-        options.RequireHttpsMetadata = builder.Configuration.GetValue<bool?>("Authentication:RequireHttpsMetadata") ?? true;
-
-        // read allowed audiences from configuration (optional)
-        var allowedAudiences = builder.Configuration.GetSection("Authentication:ValidAudiences").Get<string[]>() ?? new[] { audience };
-
-        options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
-        {
-            NameClaimType = "preferred_username",
-            RoleClaimType = "roles",
-            ValidAudiences = allowedAudiences,
-            ValidateIssuer = !string.IsNullOrEmpty(validIssuer),
-            ValidIssuer = validIssuer
-        };
-
-        // Optional: add events for helpful debugging
-        options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
-        {
-            OnAuthenticationFailed = ctx =>
-            {
-                Console.WriteLine("Auth failed: " + ctx.Exception?.Message);
-                return Task.CompletedTask;
-            },
-            OnTokenValidated = ctx =>
-            {
-                Console.WriteLine("Token validated for: " + ctx.Principal?.Identity?.Name);
-                return Task.CompletedTask;
-            }
-        };
-    });
-
-    builder.Services.AddAuthorization();
-}
-else
-{
-    Console.WriteLine("Authentication disabled via configuration (Authentication:Enabled=false)");
-
-    // Fallback No-op auth scheme, verhindert 'No authenticationScheme was specified' Fehler
-    builder.Services.AddAuthentication(options =>
-        {
-            options.DefaultAuthenticateScheme = "NoAuth";
-            options.DefaultChallengeScheme = "NoAuth";
-            options.DefaultScheme = "NoAuth";
-        })
-        .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, NoAuthHandler>("NoAuth", options => { });
-
-    // Optional: erlaubende Fallback-Policy (sorgt dafür, dass [Authorize] nicht blockiert)
-    builder.Services.AddAuthorization(options =>
-    {
-        options.FallbackPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
-            .RequireAssertion(_ => true)
-            .Build();
-    });
-
-    Console.WriteLine("NoAuth registered as default authentication scheme (auth disabled).");
-}
-
-builder.Services.AddDbContext<AssetsDbContext>(options=>options.UseNpgsql(builder.Configuration.GetConnectionString("AssetsConnection")));
-// Register ReservationsDbContext using the correct connection string key and fail fast if missing
 {
     var reservationsConn = builder.Configuration.GetConnectionString("ReservationConnection");
     if (string.IsNullOrWhiteSpace(reservationsConn))
     {
-        throw new InvalidOperationException("Connection string 'ReservationConnection' is not configured.");
+        throw new InvalidOperationException("Connection string `ReservationConnection` is not configured.");
     }
     builder.Services.AddDbContext<ReservationsDbContext>(options =>
         options
@@ -184,26 +67,18 @@ builder.Services.AddDbContext<AssetsDbContext>(options=>options.UseNpgsql(builde
             .EnableSensitiveDataLogging()
     );
 }
+
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+// Swagger in Development
+if (isDevelopment)
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// Authentication + Authorization middleware (order matters). Only add when enabled or DevAuth registered.
 app.UseHttpsRedirection();
-if (authEnabled || isDevelopement)
-{
-    app.UseAuthentication();
-    app.UseAuthorization();
-}
 
 app.MapControllers();
-app.UseHttpsRedirection();
-app.UseAuthentication();
-app.UseAuthorization();
-app.Run();
 
+app.Run();
