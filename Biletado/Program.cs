@@ -40,8 +40,6 @@ Log.Logger = new LoggerConfiguration()
 
 
 // integrate Serilog into generic host logging
-builder.Logging.ClearProviders();
-
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
