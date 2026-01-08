@@ -8,6 +8,7 @@ public class ServicesController : ControllerBase
 {
     private readonly AssetsDbContext _assetsDb;
     private readonly ILogger<ServicesController> _logger;
+    private readonly IHttpContextAccessor? _httpContextAccessor;
 
     public ServicesController(AssetsDbContext assetsDb, ILogger<ServicesController> logger)
     {
@@ -18,8 +19,14 @@ public class ServicesController : ControllerBase
     [HttpGet("status")]
     public IActionResult GetStatus()
     {   
-        _logger.LogInformation("Reservations Database connection established." +
-                               "RemoteIP: {RemoteIP} ", HttpContext.Connection.RemoteIpAddress.ToString() ?? "unknown");
+        var remoteIP = _httpContextAccessor?
+            .HttpContext?
+            .Connection?
+            .RemoteIpAddress?
+            .ToString() ?? "unknown";
+        
+        _logger.LogInformation("Status check from {RemoteIP}", remoteIP);
+        
         return Ok(new
         {
             authors= new[]{"Henri Weber", "Vivian Heidt"},
