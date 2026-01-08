@@ -4,6 +4,7 @@ using Biletado;
 using Biletado.Controller;
 using Xunit;
 using Microsoft.AspNetCore.Mvc;
+using System.Reflection;
 
 namespace UnitTests;
 
