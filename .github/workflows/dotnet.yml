@@ -30,8 +30,8 @@ jobs:
 
       - name: Test
         run: |
-          mkdir -p UnitTest/TestResults
-          dotnet test UnitTest/UnitTests.csproj --no-build -c Release \
+          mkdir -p UnitTests/TestResults
+          dotnet test UnitTests/UnitTests.csproj --no-build -c Release \
           --logger "junit;LogFileName=test-results.xml" \
           --logger "trx;LogFileName=test-results.trx" \
           --results-directory UnitTests/TestResults
