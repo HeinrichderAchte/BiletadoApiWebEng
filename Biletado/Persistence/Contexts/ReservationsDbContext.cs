@@ -1,7 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Biletado.Models;
 
-namespace Biletado;
+namespace Biletado.Persistence.Contexts;
 
 public class ReservationsDbContext : DbContext
 {
@@ -11,6 +11,7 @@ public class ReservationsDbContext : DbContext
     }
 
     public DbSet<Reservation> Reservations { get; set; } = null!;
+    public DbSet<Room> Rooms { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -1,7 +1,7 @@
 ﻿using Biletado.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace Biletado;
+namespace Biletado.Persistence.Contexts;
 
 public class AssetsDbContext(DbContextOptions<AssetsDbContext> options) : DbContext(options)
 {

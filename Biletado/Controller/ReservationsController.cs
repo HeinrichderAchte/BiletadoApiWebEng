@@ -1,9 +1,11 @@
 ﻿using Biletado.Models;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Swashbuckle.AspNetCore.Annotations;
-using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Authorization;
+using Biletado.DTOs.Response;
+using Biletado.Persistence.Contexts;
+using Biletado.Services;
+using Microsoft.EntityFrameworkCore;
 
 namespace Biletado.Controller;
 
@@ -38,6 +40,8 @@ public class ReservationsController : ControllerBase
     {
         try
         {
+            
+            _logger.LogInformation("Listing reservations"); 
             DateOnly? beforeDate = before.HasValue ? DateOnly.FromDateTime(before.Value) : (DateOnly?)null;
             DateOnly? afterDate = after.HasValue ? DateOnly.FromDateTime(after.Value) : (DateOnly?)null;
 
@@ -85,17 +89,38 @@ public class ReservationsController : ControllerBase
     public async Task<IActionResult> CreateReservation([FromBody] Reservation reservation)
     {
         if (reservation == null) return BadRequest();
-        if (reservation.reservationId == Guid.Empty) reservation.reservationId = Guid.NewGuid();
-
+        
+        _logger.LogInformation("Create reservation request received");
         try
         {
+            var errors = new List<ErrorDetail>(); 
+            if (reservation.reservationId == Guid.Empty)
+            {
+                errors.Add(new ErrorDetail("bad_request", "reservationId is required and must be a valid UUID."));
+            }
+            
+            if(reservation.fromDate > reservation.toDate)
+            {
+                errors.Add(new ErrorDetail("bad_request", "fromDate must be earlier than toDate."));
+            }
+
+            if (!reservation.roomId.HasValue)
+            {
+                errors.Add(new ErrorDetail("bad_request", "roomId is required and must be valid UUID"));
+            }
+            else
+            {
+                var roomExists = await ReservationService.RoomExists(reservation.roomId.Value);
+            }
             await _db.Reservations.AddAsync(reservation);
             await _db.SaveChangesAsync();
 
             // Audit log
             var userId = User.Identity?.Name ?? "anonymous";
             _logger.LogInformation("Audit: Operation={Operation} ObjectType={ObjectType} ObjectId={ObjectId} UserId={UserId}", "Create", "Reservation", reservation.reservationId, userId);
-
+            
+        
+            
             return CreatedAtAction(nameof(GetReservationById), new { id = reservation.reservationId }, reservation);
         }
         catch (System.Exception ex)

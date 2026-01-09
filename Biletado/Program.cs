@@ -2,6 +2,7 @@ using Biletado;
 using Microsoft.EntityFrameworkCore;
 using System.Reflection;
 using System.Text.Json.Serialization;
+using Biletado.Persistence.Contexts;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
