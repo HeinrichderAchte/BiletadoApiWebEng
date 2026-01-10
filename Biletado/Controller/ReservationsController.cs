@@ -192,13 +192,11 @@ public class ReservationsController : ControllerBase
         }
 
         var existing = await _db.Reservations.FindAsync(id);
-        if (existing == null) return NotFound();
 
         bool bodyHasDeletedAt = false;
         if (body.HasValue && body.Value.ValueKind != JsonValueKind.Null && body.Value.TryGetProperty("deletedAt", out var deletedAtProp))
         {
             bodyHasDeletedAt = true;
-
             var validationError = DeletedAtValidator.ValidateJsonProperty(deletedAtProp);
             if (validationError != null)
             {
@@ -206,9 +204,11 @@ public class ReservationsController : ControllerBase
             }
         }
 
-        // Treat presence of deletedAt in body as Restore signal (regardless of its value)
+        // Restore: ?action=Restore OR explicit "deletedAt" present in body (presence => restore)
         if (action == ActionType.Restore || bodyHasDeletedAt)
         {
+            if (existing == null) return NotFound();
+
             if (existing.deletedAt == null)
             {
                 return BadRequest(new { error = "Reservation is not deleted, cannot restore" });
@@ -231,10 +231,10 @@ public class ReservationsController : ControllerBase
             }
         }
 
-        // Replace path requires body
+        // Replace/create path requires body
         if (!body.HasValue || body.Value.ValueKind == JsonValueKind.Null)
         {
-            return BadRequest(new { error = "Reservation body is required for replace action" });
+            return BadRequest(new { error = "Reservation body is required for replace/create action" });
         }
 
         Reservation? reservationFromBody = null;
@@ -248,8 +248,86 @@ public class ReservationsController : ControllerBase
             return BadRequest(new { error = "Invalid reservation body" });
         }
 
-        if (reservationFromBody == null) return BadRequest(new { error = "Reservation body is required for replace action" });
+        if (reservationFromBody == null) return BadRequest(new { error = "Reservation body is required for replace/create action" });
 
+        var errors = new List<ErrorDetail>();
+
+        // id consistency
+        if (reservationFromBody.reservationId != Guid.Empty && reservationFromBody.reservationId != id)
+        {
+            errors.Add(new ErrorDetail("bad_request", "reservationId in body must match route id"));
+        }
+        reservationFromBody.reservationId = id;
+
+        // from/to validation
+        if (reservationFromBody.fromDate.HasValue && reservationFromBody.toDate.HasValue && reservationFromBody.fromDate > reservationFromBody.toDate)
+        {
+            errors.Add(new ErrorDetail("bad_request", "fromDate must be earlier than toDate."));
+        }
+
+        // room validation
+        if (!reservationFromBody.roomId.HasValue)
+        {
+            errors.Add(new ErrorDetail("bad_request", "roomId is required and must be a valid UUID"));
+        }
+        else
+        {
+            var roomExists = await _reservationService.RoomExists(reservationFromBody.roomId.Value);
+            if (!roomExists)
+            {
+                errors.Add(new ErrorDetail("bad_request", $"roomId {reservationFromBody.roomId} does not exist."));
+            }
+            else
+            {
+                // overlap check: exclude the current reservation id
+                if (reservationFromBody.fromDate.HasValue && reservationFromBody.toDate.HasValue)
+                {
+                    var from = reservationFromBody.fromDate.Value;
+                    var to = reservationFromBody.toDate.Value;
+
+                    var overlapExists = await _db.Reservations.AnyAsync(r =>
+                        r.deletedAt == null &&
+                        r.roomId == reservationFromBody.roomId &&
+                        r.reservationId != id &&
+                        r.fromDate.HasValue && r.toDate.HasValue &&
+                        !(r.toDate.Value < from || r.fromDate.Value > to)
+                    );
+
+                    if (overlapExists)
+                    {
+                        errors.Add(new ErrorDetail("bad_request", "Reservation overlaps with an existing reservation in the same room."));
+                    }
+                }
+            }
+        }
+
+        if (errors.Count > 0)
+        {
+            _logger.LogWarning("Validation errors while updating/creating reservation: {Errors}", errors);
+            return BadRequest(new { errors });
+        }
+
+        // If no existing reservation found => create new
+        if (existing == null)
+        {
+            try
+            {
+                await _db.Reservations.AddAsync(reservationFromBody);
+                await _db.SaveChangesAsync();
+
+                var userId = User.Identity?.Name ?? "anonymous";
+                _logger.LogInformation("Audit: Operation={Operation} ObjectType={ObjectType} ObjectId={ObjectId} UserId={UserId}", "Create", "Reservation", reservationFromBody.reservationId, userId);
+
+                return CreatedAtAction(nameof(GetReservationById), new { id = reservationFromBody.reservationId }, reservationFromBody);
+            }
+            catch (System.Exception ex)
+            {
+                _logger.LogError(ex, "Failed to create reservation in UpdateReservation path");
+                return StatusCode(500, new { error = "Failed to create reservation" });
+            }
+        }
+
+        // existing != null => perform update (replace)
         existing.fromDate = reservationFromBody.fromDate;
         existing.toDate = reservationFromBody.toDate;
         existing.roomId = reservationFromBody.roomId;
@@ -266,8 +344,6 @@ public class ReservationsController : ControllerBase
             _logger.LogError(ex, "Failed to replace reservation");
             return StatusCode(500, new { error = "Failed to replace reservation" });
         }
-            
-        
     }
 
     [HttpDelete("{id}")]
