@@ -186,8 +186,7 @@ public class ReservationsController : ControllerBase
         {
             if (existing.deletedAt == null)
             {
-                // already active
-                return Ok(existing);
+                return BadRequest (new {error = "Reservation is not deleted, cannot restore"});
             }
             existing.deletedAt = null;
             try
