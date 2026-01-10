@@ -189,6 +189,7 @@ public class ReservationsController : ControllerBase
                 return BadRequest (new {error = "Reservation is not deleted, cannot restore"});
             }
             existing.deletedAt = null;
+            _db.Entry(existing).Property(e => e.deletedAt).IsModified = true;
             try
             {
                 await _db.SaveChangesAsync();
