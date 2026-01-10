@@ -359,7 +359,7 @@ public class ReservationsController : ControllerBase
     {
         var existing = await _db.Reservations.FindAsync(id);
         if (existing == null) return NotFound();
-
+        var errors = new List<ErrorDetail>();
         if (hard)
         {
             try
@@ -384,8 +384,8 @@ public class ReservationsController : ControllerBase
             if (existing.deletedAt != null)
             {
                 // already deleted
-                _logger.LogWarning($"Reservation with id {id} was already soft-deleted."); 
-                return NotFound(existing);
+                errors.Add(new ErrorDetail("not_found", "Reservation already deleted.")); 
+                return NotFound(errors);
             }
             existing.deletedAt = DateTime.UtcNow;
             try
