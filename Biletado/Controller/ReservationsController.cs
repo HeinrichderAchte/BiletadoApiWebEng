@@ -189,190 +189,190 @@ public class ReservationsController : ControllerBase
         [FromQuery(Name = "action")] [SwaggerParameter("Action to perform: 'Replace' (default) or 'Restore' to undelete")] ActionType action = ActionType.Replace,
         [FromBody] JsonElement? body = null)
     {
-        var rawAction = HttpContext.Request.Query["action"].FirstOrDefault();
-    _logger.LogInformation("UpdateReservation called. BoundAction={BoundAction} RawQueryAction={RawAction} BodyPresent={BodyPresent}", action, rawAction, body.HasValue);
+            var rawAction = HttpContext.Request.Query["action"].FirstOrDefault();
+        _logger.LogInformation("UpdateReservation called. BoundAction={BoundAction} RawQueryAction={RawAction} BodyPresent={BodyPresent}", action, rawAction, body.HasValue);
 
-    if (!string.IsNullOrEmpty(rawAction) && Enum.TryParse<ActionType>(rawAction, true, out var parsed))
-    {
-        action = parsed;
-        _logger.LogInformation("Parsed action from raw query: {Action}", action);
-    }
-
-    var existing = await _db.Reservations.FindAsync(id);
-
-    bool bodyHasDeletedAt = false;
-    if (body.HasValue && body.Value.ValueKind != JsonValueKind.Null && body.Value.TryGetProperty("deletedAt", out var deletedAtProp))
-    {
-        bodyHasDeletedAt = true;
-        var validationError = DeletedAtValidator.ValidateJsonProperty(deletedAtProp);
-        if (validationError != null)
+        if (!string.IsNullOrEmpty(rawAction) && Enum.TryParse<ActionType>(rawAction, true, out var parsed))
         {
-            return BadRequest(new { error = validationError });
+            action = parsed;
+            _logger.LogInformation("Parsed action from raw query: {Action}", action);
         }
-    }
 
-    // Präsenz von deletedAt nur als Restore behandeln, wenn die Reservierung existiert UND aktuell gelöscht ist.
-    // Wenn die Reservierung existiert aber NICHT gelöscht ist, das Restore-Signal ignorieren und zur Replace/Validation weitergehen.
-    // Wenn die Reservierung nicht existiert, fällt die Anfrage zur Create/Replace-Logik durch.
-    if (action == ActionType.Restore || bodyHasDeletedAt)
-    {
-        if (existing != null)
+        var existing = await _db.Reservations.FindAsync(id);
+
+        bool bodyHasDeletedAt = false;
+        if (body.HasValue && body.Value.ValueKind != JsonValueKind.Null && body.Value.TryGetProperty("deletedAt", out var deletedAtProp))
         {
-            if (existing.deletedAt == null)
+            bodyHasDeletedAt = true;
+            var validationError = DeletedAtValidator.ValidateJsonProperty(deletedAtProp);
+            if (validationError != null)
             {
-                if (action == ActionType.Restore)
-                {
-                    // explizites Restore-Action, aber Objekt nicht gelöscht -> Fehler
-                    return BadRequest(new { error = "Reservation is not deleted, cannot restore" });
-                }
-                // bodyHasDeletedAt, aber Objekt ist nicht gelöscht -> IGNORIEREN und weiter zur Replace/Validation
-            }
-            else
-            {
-                // existiert und ist gelöscht -> restore durchführen
-                existing.deletedAt = null;
-                _db.Entry(existing).Property(e => e.deletedAt).IsModified = true;
-
-                try
-                {
-                    await _db.SaveChangesAsync();
-                    var userId = User.Identity?.Name ?? "anonymous";
-                    _logger.LogInformation("Audit: Operation={Operation} ObjectType={ObjectType} ObjectId={ObjectId} UserId={UserId}", "Restore", "Reservation", existing.reservationId, userId);
-                    return Ok(existing);
-                }
-                catch (System.Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to restore reservation");
-                    return StatusCode(500, new { error = "Failed to restore reservation" });
-                }
+                return BadRequest(new { error = validationError });
             }
         }
-        // existing == null -> weiter zur Create/Replace-Logik (neue Reservierung anlegen)
-    }
 
-    // Replace/create path requires body
-    if (!body.HasValue || body.Value.ValueKind == JsonValueKind.Null)
-    {
-        return BadRequest(new { error = "Reservation body is required for replace/create action" });
-    }
-
-    Reservation? reservationFromBody = null;
-    try
-    {
-        reservationFromBody = JsonSerializer.Deserialize<Reservation>(body.Value.GetRawText());
-    }
-    catch (System.Exception ex)
-    {
-        _logger.LogWarning(ex, "Failed to deserialize reservation body");
-        return BadRequest(new { error = "Invalid reservation body" });
-    }
-
-    if (reservationFromBody == null) return BadRequest(new { error = "Reservation body is required for replace/create action" });
-
-    var errors = new List<ErrorDetail>();
-
-    // id consistency
-    if (reservationFromBody.reservationId != Guid.Empty && reservationFromBody.reservationId != id)
-    {
-        errors.Add(new ErrorDetail("bad_request", "reservationId in body must match route id"));
-    }
-    reservationFromBody.reservationId = id;
-
-    // from/to validation
-    if (reservationFromBody.fromDate.HasValue && reservationFromBody.toDate.HasValue && reservationFromBody.fromDate > reservationFromBody.toDate)
-    {
-        errors.Add(new ErrorDetail("bad_request", "fromDate must be earlier than toDate."));
-    }
-
-    // room validation
-    if (!reservationFromBody.roomId.HasValue)
-    {
-        errors.Add(new ErrorDetail("bad_request", "roomId is required and must be a valid UUID"));
-    }
-    else
-    {
-        var roomExists = await _reservationService.RoomExists(reservationFromBody.roomId.Value);
-        if (!roomExists)
+        // Präsenz von deletedAt nur als Restore behandeln, wenn die Reservierung existiert UND aktuell gelöscht ist.
+        // Wenn die Reservierung existiert aber NICHT gelöscht ist, das Restore-Signal ignorieren und zur Replace/Validation weitergehen.
+        // Wenn die Reservierung nicht existiert, fällt die Anfrage zur Create/Replace-Logik durch.
+        if (action == ActionType.Restore || bodyHasDeletedAt)
         {
-            errors.Add(new ErrorDetail("bad_request", $"roomId {reservationFromBody.roomId} does not exist."));
-        }
-        else
-        {
-            // overlap check: exclude the current reservation id
-            if (reservationFromBody.fromDate.HasValue && reservationFromBody.toDate.HasValue)
+            if (existing != null)
             {
-                var from = reservationFromBody.fromDate.Value;
-                var to = reservationFromBody.toDate.Value;
-
-                var overlapExists = await _db.Reservations.AnyAsync(r =>
-                    r.deletedAt == null &&
-                    r.roomId == reservationFromBody.roomId &&
-                    r.reservationId != id &&
-                    r.fromDate.HasValue && r.toDate.HasValue &&
-                    !(r.toDate.Value < from || r.fromDate.Value > to)
-                );
-
-                if (overlapExists)
+                if (existing.deletedAt == null)
                 {
-                    errors.Add(new ErrorDetail("conflict", "Reservation overlaps with an existing reservation in the same room."));
+                    if (action == ActionType.Restore)
+                    {
+                        // explizites Restore-Action, aber Objekt nicht gelöscht -> Fehler
+                        return BadRequest(new { error = "Reservation is not deleted, cannot restore" });
+                    }
+                    // bodyHasDeletedAt, aber Objekt ist nicht gelöscht -> IGNORIEREN und weiter zur Replace/Validation
+                }
+                else
+                {
+                    // existiert und ist gelöscht -> restore durchführen
+                    existing.deletedAt = null;
+                    _db.Entry(existing).Property(e => e.deletedAt).IsModified = true;
+
+                    try
+                    {
+                        await _db.SaveChangesAsync();
+                        var userId = User.Identity?.Name ?? "anonymous";
+                        _logger.LogInformation("Audit: Operation={Operation} ObjectType={ObjectType} ObjectId={ObjectId} UserId={UserId}", "Restore", "Reservation", existing.reservationId, userId);
+                        return Ok(existing);
+                    }
+                    catch (System.Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to restore reservation");
+                        return StatusCode(500, new { error = "Failed to restore reservation" });
+                    }
                 }
             }
+            // existing == null -> weiter zur Create/Replace-Logik (neue Reservierung anlegen)
         }
-    }
 
-    if (errors.Count > 0)
-    {
-        _logger.LogWarning("Validation errors while updating/creating reservation: {Errors}", errors);
-        return BadRequest(new { errors });
-    }
+        // Replace/create path requires body
+        if (!body.HasValue || body.Value.ValueKind == JsonValueKind.Null)
+        {
+            return BadRequest(new { error = "Reservation body is required for replace/create action" });
+        }
 
-    // If no existing reservation found => create new
-    if (existing == null)
-    {
+        Reservation? reservationFromBody = null;
         try
         {
-            // ensure deletedAt is null for new reservations (client may have sent deletedAt)
-            reservationFromBody.deletedAt = null;
-            
-            var duplicate = await _db.Reservations.AnyAsync(r => r.reservationId == reservationFromBody.reservationId);
-            if (duplicate)
-            {
-                _logger.LogWarning("Attempt to create duplicate reservationId {ReservationId} in UpdateReservation", reservationFromBody.reservationId);
-                return Conflict(new { error = "Reservation with same reservationId already exists." });
-            }
-            
-            await _db.Reservations.AddAsync(reservationFromBody);
-            await _db.SaveChangesAsync();
-
-            var userId = User.Identity?.Name ?? "anonymous";
-            _logger.LogInformation("Audit: Operation={Operation} ObjectType={ObjectType} ObjectId={ObjectId} UserId={UserId}", "Create", "Reservation", reservationFromBody.reservationId, userId);
-
-            return CreatedAtAction(nameof(GetReservationById), new { id = reservationFromBody.reservationId }, reservationFromBody);
+            reservationFromBody = JsonSerializer.Deserialize<Reservation>(body.Value.GetRawText());
         }
         catch (System.Exception ex)
         {
-            _logger.LogError(ex, "Failed to create reservation in UpdateReservation path");
-            return StatusCode(500, new { error = "Failed to create reservation" });
+            _logger.LogWarning(ex, "Failed to deserialize reservation body");
+            return BadRequest(new { error = "Invalid reservation body" });
         }
-    }
 
-    // existing != null => perform update (replace)
-    existing.fromDate = reservationFromBody.fromDate;
-    existing.toDate = reservationFromBody.toDate;
-    existing.roomId = reservationFromBody.roomId;
+        if (reservationFromBody == null) return BadRequest(new { error = "Reservation body is required for replace/create action" });
 
-    try
-    {
-        await _db.SaveChangesAsync();
-        var userId = User.Identity?.Name ?? "anonymous";
-        _logger.LogInformation("Audit: Operation={Operation} ObjectType={ObjectType} ObjectId={ObjectId} UserId={UserId}", "Replace", "Reservation", existing.reservationId, userId);
-        return Ok(existing);
-    }
-    catch (System.Exception ex)
-    {
-        _logger.LogError(ex, "Failed to replace reservation");
-        return StatusCode(500, new { error = "Failed to replace reservation" });
-    }
+        var errors = new List<ErrorDetail>();
+
+        // id consistency
+        if (reservationFromBody.reservationId != Guid.Empty && reservationFromBody.reservationId != id)
+        {
+            errors.Add(new ErrorDetail("bad_request", "reservationId in body must match route id"));
+        }
+        reservationFromBody.reservationId = id;
+
+        // from/to validation
+        if (reservationFromBody.fromDate.HasValue && reservationFromBody.toDate.HasValue && reservationFromBody.fromDate > reservationFromBody.toDate)
+        {
+            errors.Add(new ErrorDetail("bad_request", "fromDate must be earlier than toDate."));
+        }
+
+        // room validation
+        if (!reservationFromBody.roomId.HasValue)
+        {
+            errors.Add(new ErrorDetail("bad_request", "roomId is required and must be a valid UUID"));
+        }
+        else
+        {
+            var roomExists = await _reservationService.RoomExists(reservationFromBody.roomId.Value);
+            if (!roomExists)
+            {
+                errors.Add(new ErrorDetail("bad_request", $"roomId {reservationFromBody.roomId} does not exist."));
+            }
+            else
+            {
+                // overlap check: exclude the current reservation id
+                if (reservationFromBody.fromDate.HasValue && reservationFromBody.toDate.HasValue)
+                {
+                    var from = reservationFromBody.fromDate.Value;
+                    var to = reservationFromBody.toDate.Value;
+
+                    var overlapExists = await _db.Reservations.AnyAsync(r =>
+                        r.deletedAt == null &&
+                        r.roomId == reservationFromBody.roomId &&
+                        r.reservationId != id &&
+                        r.fromDate.HasValue && r.toDate.HasValue &&
+                        !(r.toDate.Value < from || r.fromDate.Value > to)
+                    );
+
+                    if (overlapExists)
+                    {
+                        errors.Add(new ErrorDetail("conflict", "Reservation overlaps with an existing reservation in the same room."));
+                    }
+                }
+            }
+        }
+
+        if (errors.Count > 0)
+        {
+            _logger.LogWarning("Validation errors while updating/creating reservation: {Errors}", errors);
+            return BadRequest(new { errors });
+        }
+
+        // If no existing reservation found => create new
+        if (existing == null)
+        {
+            try
+            {
+                // ensure deletedAt is null for new reservations (client may have sent deletedAt)
+                reservationFromBody.deletedAt = null;
+                
+                var duplicate = await _db.Reservations.AnyAsync(r => r.reservationId == reservationFromBody.reservationId);
+                if (duplicate)
+                {
+                    _logger.LogWarning("Attempt to create duplicate reservationId {ReservationId} in UpdateReservation", reservationFromBody.reservationId);
+                    return Conflict(new { error = "Reservation with same reservationId already exists." });
+                }
+                
+                await _db.Reservations.AddAsync(reservationFromBody);
+                await _db.SaveChangesAsync();
+
+                var userId = User.Identity?.Name ?? "anonymous";
+                _logger.LogInformation("Audit: Operation={Operation} ObjectType={ObjectType} ObjectId={ObjectId} UserId={UserId}", "Create", "Reservation", reservationFromBody.reservationId, userId);
+
+                return CreatedAtAction(nameof(GetReservationById), new { id = reservationFromBody.reservationId }, reservationFromBody);
+            }
+            catch (System.Exception ex)
+            {
+                _logger.LogError(ex, "Failed to create reservation in UpdateReservation path");
+                return StatusCode(500, new { error = "Failed to create reservation" });
+            }
+        }
+
+        // existing != null => perform update (replace)
+        existing.fromDate = reservationFromBody.fromDate;
+        existing.toDate = reservationFromBody.toDate;
+        existing.roomId = reservationFromBody.roomId;
+
+        try
+        {
+            await _db.SaveChangesAsync();
+            var userId = User.Identity?.Name ?? "anonymous";
+            _logger.LogInformation("Audit: Operation={Operation} ObjectType={ObjectType} ObjectId={ObjectId} UserId={UserId}", "Replace", "Reservation", existing.reservationId, userId);
+            return Ok(existing);
+        }
+        catch (System.Exception ex)
+        {
+            _logger.LogError(ex, "Failed to replace reservation");
+            return StatusCode(500, new { error = "Failed to replace reservation" });
+        }
     }
 
     [HttpDelete("{id}")]
@@ -409,7 +409,8 @@ public class ReservationsController : ControllerBase
             if (existing.deletedAt != null)
             {
                 // already deleted
-                return Ok(existing);
+                _logger.LogWarning($"Reservation with id {id} was already soft-deleted."); 
+                return NotFound(existing);
             }
             existing.deletedAt = DateTime.UtcNow;
             try
