@@ -21,6 +21,7 @@ public class ReservationsDbContext : DbContext
         {
             r.ToTable("reservations");
             r.HasKey(x => x.reservationId);
+            r.HasIndex(x => x.reservationId).IsUnique();
             r.Property(x => x.reservationId).HasColumnName("id");
             r.Property(x => x.fromDate).HasColumnName("from").IsRequired();
             r.Property(x => x.toDate).HasColumnName("to");

@@ -144,6 +144,14 @@ public class ReservationsController : ControllerBase
                 _logger.LogWarning("Validation errors while creating reservation: {Errors}", errors);
                 return BadRequest(new { errors });
             }
+            
+            var existsWithSameId = await _db.Reservations.AnyAsync(r => r.reservationId == reservation.reservationId);
+            if (existsWithSameId)
+            {
+                _logger.LogWarning("Attempt to create duplicate reservationId {ReservationId}", reservation.reservationId);
+                return Conflict(new { error = "Reservation with same reservationId already exists." });
+            }
+            
             await _db.Reservations.AddAsync(reservation);
             await _db.SaveChangesAsync();
 
@@ -325,7 +333,14 @@ public class ReservationsController : ControllerBase
         {
             // ensure deletedAt is null for new reservations (client may have sent deletedAt)
             reservationFromBody.deletedAt = null;
-
+            
+            var duplicate = await _db.Reservations.AnyAsync(r => r.reservationId == reservationFromBody.reservationId);
+            if (duplicate)
+            {
+                _logger.LogWarning("Attempt to create duplicate reservationId {ReservationId} in UpdateReservation", reservationFromBody.reservationId);
+                return Conflict(new { error = "Reservation with same reservationId already exists." });
+            }
+            
             await _db.Reservations.AddAsync(reservationFromBody);
             await _db.SaveChangesAsync();
 
