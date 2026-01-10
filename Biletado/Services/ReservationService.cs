@@ -4,15 +4,16 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using Biletado.Persistence.Contexts;
+using ILogger = Serilog.ILogger;
 
 namespace Biletado.Services
 {
     public class ReservationService : IReservationService
     {
         private readonly ReservationsDbContext _db;
-        private readonly Serilog.ILogger _logger;
+        private readonly ILogger<ReservationService> _logger;
 
-        public ReservationService(ReservationsDbContext db, Serilog.ILogger logger)
+        public ReservationService(ReservationsDbContext db, ILogger<ReservationService> logger)
         {
             _db = db ?? throw new ArgumentNullException(nameof(db));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -26,7 +27,7 @@ namespace Biletado.Services
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Fehler beim Prüfen von RoomExists für {RoomId}", roomId);
+                _logger.LogError(ex, "Fehler beim Prüfen von RoomExists für {RoomId}", roomId);
                 return false;
             }
         }
