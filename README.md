@@ -12,7 +12,7 @@ bietet eine **Rapidoc UI** zur interaktiven API-Dokumentation.
 
 Framework: **ASP.NET Core (.NET)**\
 Service-Port: **9000**\
-Autoren: Henri Weber; Vivian Heidt
+Autoren: Henri Weber; Vivian Heidt\
 Lizenz: MIT (siehe LICENSE)
 
 Ziel der Abgabe ist, dass die API als **Container lauffähig** ist, sich
@@ -56,11 +56,11 @@ Health-Endpunkte bereit.\
 -   `POST api/v3/reservations/reservations` -- anlegen einer Reservierung\
 -   `GET api/v3/reservations/reservations/{id}` -- Reservierung anhand einer ID lesen\
 -   `PUT api/v3/reservations/reservations/{id}` -- Aktualisieren / Widerherstellen einer Reservierung\
--   `DELETE api/v3/reservations/reservations/{id}` -- Soft Delete/ Hard Delete einer Reservierung 
+-   `DELETE api/v3/reservations/reservations/{id}` -- Soft Delete/ Hard Delete einer Reservierung
 
 ------------------------------------------------------------------------
 
-# API-Dokumentation
+# Zugriff auf die UI-Testumgebung
 
 Die API bringt eine integrierte Rapidoc UI mit.
 
@@ -72,14 +72,40 @@ Nach lokalem Start ist sie erreichbar unter:
 
 # Konfiguration
 
-Die Konfiguration erfolgt zur Laufzeit ueber **Umgebungsvariablen** und
-ggf. ueber Kubernetes-Manifeste (Kustomize).
 
-Typische Parameter:
+## Übersicht
+- Konfiguration findet primär in `appsettings.json` / `appsettings.Development.json`.
+- Produktionswerte sollten über Umgebungsvariablen oder Secret-Mechanismen bereitgestellt werden.
+- Nested JSON‑Keys werden in Umgebungsvariablen mit doppeltem Unterstrich `__` abgebildet (z.\ B. `ConnectionStrings__Default` → `ConnectionStrings:Default`).
 
-ASPNETCORE_ENVIRONMENT, ASPNETCORE_URLS, LOG_LEVEL, DB_HOST, DB_PORT,
-DB_NAME, DB_USER, DB_PASSWORD
+## Wichtige Umgebungsvariablen
+- `ASPNETCORE_ENVIRONMENT`
+    - Werte: `Development`, `Production`
+    - Steuert welches `appsettings.*` geladen wird.
 
+- `ConnectionStrings__Default`
+    - Beschreibung: Haupt-Datenbank‑Connection‑String.
+    - Beispiel: `Server=localhost;Database=biletado;User Id=sa;Password=YourP@ss;`
+
+- `Iam__Authority`
+    - Beschreibung: Authority/Issuer URL des Identity Providers (falls Auth verwendet wird).
+    - Beispiel: `https://auth.example/`
+
+- `ASPNETCORE_URLS` (optional)
+    - Beschreibung: Bind‑URLs für Kestrel (z.\ B. `http://+:9090`).
+    - Alternative: Kestrel‑Konfiguration via `Kestrel__Endpoints__Http__Url`.
+
+- Logging (optional)
+    - `Logging__LogLevel__Default` — z.\ B. `Information` / `Debug`.
+
+## Beispiele zum Setzen (Windows / PowerShell / CMD / Rider / Docker)
+
+PowerShell (nur aktuelle Session):
+```powershell
+$env:ASPNETCORE_ENVIRONMENT = "Development"
+$env:ConnectionStrings__Default = "Server=localhost;Database=biletado;User Id
+dotnet run --project Biletado\Biletado.csproj 
+```
 ------------------------------------------------------------------------
 
 # Authentifizierung
@@ -144,14 +170,14 @@ kubectl port-forward -n biletado svc/biletado 9000:9000
 
 Das Repository enhält eine GitHub-Actions-Pipeline für die automatisch ein Image baut und es in die
 GitHub Registry Push. Außerdem wird automatisiert ein Unit-Test durchgeführt. Die Logs des Testlaufes
-liegen unter dem Reiter "Actions" in Form eines Artifacts vor.  
+liegen unter dem Reiter "Actions" in Form eines Artifacts vor.
 
 ------------------------------------------------------------------------
 
 # Logging
 
 Logging erfolgt über das Serilog Framework (Dokumentation: https://github.com/serilog/serilog/wiki). Das Loglevel ist
-konfigurierbar. 
+konfigurierbar.
 
 ------------------------------------------------------------------------
 
