@@ -52,11 +52,11 @@ Health-Endpunkte bereit.\
 ## Reservations API
 
 
--   `GET /api/...` -- Lesen von allen Reservierungen\
--   `POST /api/.../{id}` -- anlegen einer Reservierung\
--   `GET /api/...` -- Reservierung anhand einer ID lesen\
--   `PUT /api/.../{id}` -- Aktualisieren / Widerherstellen einer Reservierung\
--   `DELETE /api/.../{id}` -- Soft Delete/ Hard Delete einer Reservierung 
+-   `GET api/v3/reservations/reservations` -- Lesen von allen Reservierungen\
+-   `POST api/v3/reservations/reservations` -- anlegen einer Reservierung\
+-   `GET api/v3/reservations/reservations/{id}` -- Reservierung anhand einer ID lesen\
+-   `PUT api/v3/reservations/reservations/{id}` -- Aktualisieren / Widerherstellen einer Reservierung\
+-   `DELETE api/v3/reservations/reservations/{id}` -- Soft Delete/ Hard Delete einer Reservierung 
 
 ------------------------------------------------------------------------
 
@@ -142,15 +142,16 @@ kubectl port-forward -n biletado svc/biletado 9000:9000
 
 # CI / Build & Testautomation
 
-Das Repository enthaelt eine GitHub-Actions-Pipeline fuer Build und
-optionale Tests.
+Das Repository enhält eine GitHub-Actions-Pipeline für die automatisch ein Image baut und es in die
+GitHub Registry Push. Außerdem wird automatisiert ein Unit-Test durchgeführt. Die Logs des Testlaufes
+liegen unter dem Reiter "Actions" in Form eines Artifacts vor.  
 
 ------------------------------------------------------------------------
 
 # Logging
 
-Logging erfolgt ueber das Serilog (Dokumentation: https://github.com/serilog/serilog/wiki). Das Loglevel ist
-konfigurierbar.
+Logging erfolgt über das Serilog Framework (Dokumentation: https://github.com/serilog/serilog/wiki). Das Loglevel ist
+konfigurierbar. 
 
 ------------------------------------------------------------------------
 
